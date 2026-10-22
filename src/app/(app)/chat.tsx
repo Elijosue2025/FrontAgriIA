@@ -15,6 +15,7 @@ import { useAuth } from '@/context/AuthContext';
 import { chatService, ModoModelo } from '@/services/chatService';
 import { conversacionService, Conversacion } from '@/services/conversacionService';
 import { AgroColors as colors, MaxContentWidth } from '@/constants/theme';
+import { router } from '../../../.expo/types/router';
 
 type Mensaje = {
   id: string;
@@ -127,18 +128,36 @@ export default function ChatScreen() {
     }
   };
 
-  const retomar = (c: Conversacion) => {
+  const retomar = async (c: Conversacion) => {
+    setVerHistorial(false);
     setConversacionId(c.id);
     setTitulo(c.titulo);
-    setMensajes([
-      {
-        id: uid(),
-        rol: 'sistema',
-        texto:
-          'Retomaste esta conversación. Los mensajes anteriores aún no se muestran, pero puedes seguir preguntando.',
-      },
-    ]);
-    setVerHistorial(false);
+    setEnviando(true);
+    try {
+      const det = await conversacionService.obtener(c.id);
+      // Si el detalle no trae mensajes, usa el endpoint dedicado:
+      const msgs = det.mensajes?.length
+        ? det.mensajes
+        : await conversacionService.mensajes(c.id);
+
+      setMensajes(
+        msgs.map((m) => ({
+          id: String(m.id),
+          rol: m.rol?.toLowerCase() === 'user' ? 'user' : 'ia',
+          texto: m.contenido,
+        }))
+      );
+    } catch {
+      setMensajes([
+        {
+          id: uid(),
+          rol: 'sistema',
+          texto: 'No se pudieron cargar los mensajes anteriores. Puedes seguir preguntando en este hilo.',
+        },
+      ]);
+    } finally {
+      setEnviando(false);
+    }
   };
 
   const onKeyPress = (e: any) => {
@@ -256,6 +275,9 @@ export default function ChatScreen() {
             blurOnSubmit={false}
             editable={!enviando}
           />
+          <Pressable style={s.camBtn} onPress={() => router.push('/diagnostico')}>
+            <FontAwesome5 name="camera" size={16} color={colors.green} />
+          </Pressable>
           <Pressable
             style={[s.enviarBtn, !puedeEnviar && s.enviarBtnOff]}
             onPress={() => enviar()}
