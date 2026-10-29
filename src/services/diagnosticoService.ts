@@ -5,6 +5,7 @@ import { API_URL } from './api';
 export type DiagnosticoResultado = {
   exito: boolean;
   clase?: string;
+  claseDetectada?: string;
   confianza?: number;
   cultivo?: string;
   mensaje?: string;
@@ -12,43 +13,50 @@ export type DiagnosticoResultado = {
   errorMensaje?: string;
 };
 
-/**
- * POST multipart /api/Diagnostico/analizar
- * Campos: Imagen (file), Cultivo (string opcional)
- */
+/** multipart: campos "imagen" y opcional "cultivo" */
 export async function analizarImagen(
   uri: string,
   cultivo?: string,
-  nombreArchivo = 'foto.jpg'
+  nombre = 'foto.jpg'
 ): Promise<DiagnosticoResultado> {
   const token = await storage.get('token');
   const form = new FormData();
 
   if (Platform.OS === 'web') {
     const blob = await (await fetch(uri)).blob();
-    form.append('Imagen', blob, nombreArchivo);
+    form.append('imagen', blob, nombre);
   } else {
-    form.append('Imagen', {
+    form.append('imagen', {
       uri,
-      name: nombreArchivo,
+      name: nombre,
       type: 'image/jpeg',
     } as any);
   }
 
-  if (cultivo?.trim()) form.append('Cultivo', cultivo.trim());
+  if (cultivo?.trim()) form.append('cultivo', cultivo.trim());
 
   const res = await fetch(`${API_URL}/Diagnostico/analizar`, {
     method: 'POST',
     headers: {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      // NO pongas Content-Type: el boundary lo pone fetch
     },
     body: form,
   });
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data.error || data.errorMensaje || data.title || `Error ${res.status}`);
+    throw new Error(
+      data.error || data.errorMensaje || data.mensaje || data.title || `Error ${res.status}`
+    );
   }
   return data;
+}
+
+export function etiquetaDiagnostico(d: DiagnosticoResultado): string {
+  return (
+    d.claseDetectada ||
+    d.clase ||
+    d.mensaje ||
+    'problema detectado en la imagen'
+  );
 }

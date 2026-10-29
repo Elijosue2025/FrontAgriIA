@@ -15,8 +15,7 @@ import { useAuth } from '@/context/AuthContext';
 import { chatService, ModoModelo } from '@/services/chatService';
 import { conversacionService, Conversacion } from '@/services/conversacionService';
 import { AgroColors as colors, MaxContentWidth } from '@/constants/theme';
-import { router } from '../../../.expo/types/router';
-
+import { router } from 'expo-router';
 type Mensaje = {
   id: string;
   rol: 'user' | 'ia' | 'sistema';
