@@ -9,19 +9,23 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Image,
+  Alert,
 } from 'react-native';
 import { FontAwesome5 } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '@/context/AuthContext';
 import { chatService, ModoModelo } from '@/services/chatService';
 import { conversacionService, Conversacion } from '@/services/conversacionService';
-import { AgroColors as colors, MaxContentWidth } from '@/constants/theme';
-import { router } from 'expo-router';
+import { analizarImagen, textoParaChat } from '@/services/diagnosticoService';
+import { AgroColors as colors } from '@/constants/theme';
+
 type Mensaje = {
   id: string;
   rol: 'user' | 'ia' | 'sistema';
   texto: string;
+  imagenUri?: string;
   error?: boolean;
-  /** Solo UI: no se guarda en la API */
   tiempoMs?: number;
   modo?: ModoModelo;
 };
@@ -44,9 +48,12 @@ export default function ChatScreen() {
 
   const [mensajes, setMensajes] = useState<Mensaje[]>([]);
   const [texto, setTexto] = useState('');
+  const [fotoUri, setFotoUri] = useState<string | null>(null);
+  const [cultivo, setCultivo] = useState('papa');
   const [conversacionId, setConversacionId] = useState<number | null>(null);
   const [titulo, setTitulo] = useState('Nueva consulta');
   const [enviando, setEnviando] = useState(false);
+  const [fase, setFase] = useState<'idle' | 'imagen' | 'texto'>('idle');
   const [modo, setModo] = useState<ModoModelo>('preciso');
 
   const [historial, setHistorial] = useState<Conversacion[]>([]);
@@ -57,13 +64,71 @@ export default function ChatScreen() {
 
   const agregar = (m: Mensaje) => setMensajes((prev) => [...prev, m]);
 
+  const pedirPermiso = async (camara: boolean) => {
+    if (camara) {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      return status === 'granted';
+    }
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    return status === 'granted';
+  };
+
+  const adjuntarCamara = async () => {
+    if (!(await pedirPermiso(true))) {
+      Alert.alert('Permiso', 'Necesitamos acceso a la cámara.');
+      return;
+    }
+    const r = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      quality: 0.8,
+    });
+    if (!r.canceled && r.assets[0]) setFotoUri(r.assets[0].uri);
+  };
+
+  const adjuntarGaleria = async () => {
+    if (!(await pedirPermiso(false))) {
+      Alert.alert('Permiso', 'Necesitamos acceso a la galería.');
+      return;
+    }
+    const r = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.8,
+    });
+    if (!r.canceled && r.assets[0]) setFotoUri(r.assets[0].uri);
+  };
+
+  const elegirFuenteFoto = () => {
+    if (Platform.OS === 'web') {
+      adjuntarGaleria();
+      return;
+    }
+    Alert.alert('Adjuntar foto', 'Elige una fuente', [
+      { text: 'Cámara', onPress: adjuntarCamara },
+      { text: 'Galería', onPress: adjuntarGaleria },
+      { text: 'Cancelar', style: 'cancel' },
+    ]);
+  };
+
   const enviar = async (preguntaDirecta?: string) => {
     const pregunta = (preguntaDirecta ?? texto).trim();
-    if (!pregunta || enviando || !usuarioId) return;
+    const foto = fotoUri;
+    if ((!pregunta && !foto) || enviando || !usuarioId) return;
 
     setTexto('');
+    setFotoUri(null);
     setEnviando(true);
-    agregar({ id: uid(), rol: 'user', texto: pregunta });
+    setFase(foto ? 'imagen' : 'texto');
+
+    const textoUsuario =
+      pregunta ||
+      (foto ? '¿Qué tiene esta planta y cómo la trato según los manuales?' : '');
+
+    agregar({
+      id: uid(),
+      rol: 'user',
+      texto: textoUsuario,
+      imagenUri: foto ?? undefined,
+    });
 
     const t0 = Date.now();
 
@@ -71,24 +136,48 @@ export default function ChatScreen() {
       let id = conversacionId;
 
       if (id === null) {
-        const nueva = await conversacionService.crear(usuarioId, pregunta.slice(0, 50));
+        const tituloNuevo = foto
+          ? `Foto · ${(cultivo || 'cultivo').slice(0, 20)}`
+          : pregunta.slice(0, 50);
+        const nueva = await conversacionService.crear(usuarioId, tituloNuevo);
         id = nueva.id;
         setConversacionId(id);
         setTitulo(nueva.titulo);
       }
 
-      const r = await chatService.consultar(usuarioId, id, pregunta, modo);
-      const tiempoMs = Date.now() - t0;
+      if (foto) {
+        setFase('imagen');
+        const vision = await analizarImagen(foto, cultivo || 'papa', {
+          conversacionId: id,
+        });
 
-      if (!r.exito) throw new Error(r.errorMensaje || 'No se pudo obtener una respuesta');
+        if (!vision.exito) {
+          throw new Error(vision.errorMensaje || 'Error al analizar la imagen');
+        }
 
-      agregar({
-        id: uid(),
-        rol: 'ia',
-        texto: r.respuesta,
-        tiempoMs,
-        modo,
-      });
+        const tiempoMs = Date.now() - t0;
+        agregar({
+          id: uid(),
+          rol: 'ia',
+          texto: textoParaChat(vision),
+          tiempoMs,
+          modo,
+        });
+      } else {
+        setFase('texto');
+        const r = await chatService.consultar(usuarioId, id, pregunta, modo);
+        const tiempoMs = Date.now() - t0;
+
+        if (!r.exito) throw new Error(r.errorMensaje || 'No se pudo obtener una respuesta');
+
+        agregar({
+          id: uid(),
+          rol: 'ia',
+          texto: r.respuesta,
+          tiempoMs,
+          modo,
+        });
+      }
     } catch (e: any) {
       const tiempoMs = Date.now() - t0;
       agregar({
@@ -101,6 +190,7 @@ export default function ChatScreen() {
       });
     } finally {
       setEnviando(false);
+      setFase('idle');
     }
   };
 
@@ -109,6 +199,7 @@ export default function ChatScreen() {
     setConversacionId(null);
     setTitulo('Nueva consulta');
     setTexto('');
+    setFotoUri(null);
     setVerHistorial(false);
   };
 
@@ -131,10 +222,10 @@ export default function ChatScreen() {
     setVerHistorial(false);
     setConversacionId(c.id);
     setTitulo(c.titulo);
+    setFotoUri(null);
     setEnviando(true);
     try {
       const det = await conversacionService.obtener(c.id);
-      // Si el detalle no trae mensajes, usa el endpoint dedicado:
       const msgs = det.mensajes?.length
         ? det.mensajes
         : await conversacionService.mensajes(c.id);
@@ -166,14 +257,18 @@ export default function ChatScreen() {
     }
   };
 
-  const puedeEnviar = texto.trim().length > 0 && !enviando;
+  const puedeEnviar = (texto.trim().length > 0 || !!fotoUri) && !enviando;
+
+  const textoPensando =
+    fase === 'imagen'
+      ? 'Analizando imagen y consultando manuales…'
+      : `Pensando (${modo === 'rapido' ? 'Rápido' : 'Preciso'})…`;
 
   return (
     <KeyboardAvoidingView
       style={s.container}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      {/* Encabezado */}
       <View style={s.header}>
         <Text style={s.headerTitle} numberOfLines={1}>
           {titulo}
@@ -190,7 +285,6 @@ export default function ChatScreen() {
         </View>
       </View>
 
-      {/* Selector de modelo */}
       <View style={s.modos}>
         <Pressable
           style={[s.modoChip, modo === 'rapido' && s.modoChipOn]}
@@ -214,9 +308,20 @@ export default function ChatScreen() {
           />
           <Text style={[s.modoText, modo === 'preciso' && s.modoTextOn]}>Preciso · 7B</Text>
         </Pressable>
+        <Pressable
+          style={[s.modoChip, cultivo === 'papa' && s.modoChipOn]}
+          onPress={() => setCultivo('papa')}
+        >
+          <Text style={[s.modoText, cultivo === 'papa' && s.modoTextOn]}>Papa</Text>
+        </Pressable>
+        <Pressable
+          style={[s.modoChip, cultivo === 'quinua' && s.modoChipOn]}
+          onPress={() => setCultivo('quinua')}
+        >
+          <Text style={[s.modoText, cultivo === 'quinua' && s.modoTextOn]}>Quinua</Text>
+        </Pressable>
       </View>
 
-      {/* Mensajes */}
       <FlatList
         ref={listaRef}
         data={mensajes}
@@ -232,7 +337,7 @@ export default function ChatScreen() {
             </View>
             <Text style={s.vacioTitulo}>¿En qué puedo ayudarte hoy?</Text>
             <Text style={s.vacioSub}>
-              Consulta sobre cultivos, plagas, enfermedades y manejo agronómico.
+              Escribe una consulta o adjunta una foto de la planta para analizarla en este mismo chat.
             </Text>
             <View style={s.chips}>
               {SUGERENCIAS.map((q) => (
@@ -251,21 +356,30 @@ export default function ChatScreen() {
               </View>
               <View style={[s.burbuja, s.burbujaIa, s.pensando]}>
                 <ActivityIndicator size="small" color={colors.green} />
-                <Text style={s.pensandoText}>
-                  Pensando ({modo === 'rapido' ? 'Rápido' : 'Preciso'})…
-                </Text>
+                <Text style={s.pensandoText}>{textoPensando}</Text>
               </View>
             </View>
           ) : null
         }
       />
 
-      {/* Entrada */}
+      {fotoUri ? (
+        <View style={s.previewBar}>
+          <Image source={{ uri: fotoUri }} style={s.previewThumb} />
+          <Text style={s.previewLabel} numberOfLines={1}>
+            Foto lista · cultivo: {cultivo}
+          </Text>
+          <Pressable onPress={() => setFotoUri(null)} hitSlop={12}>
+            <FontAwesome5 name="times-circle" size={18} color={colors.textSecondary} />
+          </Pressable>
+        </View>
+      ) : null}
+
       <View style={s.inputZona}>
         <View style={s.inputBox}>
           <TextInput
             style={[s.input, Platform.OS === 'web' && ({ outlineStyle: 'none' } as any)]}
-            placeholder="Escribe tu consulta agronómica..."
+            placeholder="Consulta o adjunta una foto..."
             placeholderTextColor={colors.textSecondary}
             value={texto}
             onChangeText={setTexto}
@@ -274,7 +388,7 @@ export default function ChatScreen() {
             blurOnSubmit={false}
             editable={!enviando}
           />
-          <Pressable style={s.camBtn} onPress={() => router.push('/diagnostico')}>
+          <Pressable style={s.camBtn} onPress={elegirFuenteFoto} disabled={enviando}>
             <FontAwesome5 name="camera" size={16} color={colors.green} />
           </Pressable>
           <Pressable
@@ -286,12 +400,11 @@ export default function ChatScreen() {
           </Pressable>
         </View>
         <Text style={s.aviso}>
-          AgroGuía IA puede cometer errores. Ante decisiones críticas, consulta a un técnico
-          agrónomo.
+          AgroGuía IA puede cometer errores. El análisis por foto es orientativo; consulta a un técnico
+          ante decisiones críticas.
         </Text>
       </View>
 
-      {/* Historial */}
       {verHistorial && (
         <View style={s.panel}>
           <Text style={s.panelTitulo}>Conversaciones</Text>
@@ -342,6 +455,9 @@ function Burbuja({ m }: { m: Mensaje }) {
           m.error && s.burbujaError,
         ]}
       >
+        {m.imagenUri ? (
+          <Image source={{ uri: m.imagenUri }} style={s.burbujaImg} resizeMode="cover" />
+        ) : null}
         <Text
           selectable
           style={[s.texto, esUsuario && { color: '#fff' }, m.error && { color: colors.danger }]}
@@ -361,7 +477,6 @@ function Burbuja({ m }: { m: Mensaje }) {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgMain },
-
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -392,9 +507,9 @@ const s = StyleSheet.create({
   },
   headerBtnPrimary: { backgroundColor: colors.greenDark, borderColor: colors.greenDark },
   headerBtnText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
-
   modos: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
     paddingHorizontal: 16,
     paddingVertical: 10,
@@ -412,131 +527,121 @@ const s = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.bgCard,
   },
-  modoChipOn: {
-    borderColor: colors.green,
-    backgroundColor: 'rgba(34,197,94,0.15)',
-  },
+  modoChipOn: { borderColor: colors.green, backgroundColor: 'rgba(34,197,94,0.12)' },
   modoText: { color: colors.textSecondary, fontSize: 12, fontWeight: '600' },
   modoTextOn: { color: colors.green },
-
-  lista: {
-    flexGrow: 1,
-    padding: 16,
-    width: '100%',
-    maxWidth: MaxContentWidth,
-    alignSelf: 'center',
-  },
-
-  fila: { flexDirection: 'row', marginBottom: 14, alignItems: 'flex-end' },
-  filaUsuario: { justifyContent: 'flex-end' },
-  filaIa: { justifyContent: 'flex-start' },
-  avatarIa: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    marginRight: 8,
-    backgroundColor: 'rgba(34,197,94,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  burbuja: {
-    maxWidth: '82%',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 16,
-  },
-  burbujaUsuario: { backgroundColor: colors.greenDark, borderBottomRightRadius: 4 },
-  burbujaIa: {
-    backgroundColor: colors.bgCard,
-    borderBottomLeftRadius: 4,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  burbujaError: { borderColor: colors.danger },
-  texto: { color: colors.text, fontSize: 15, lineHeight: 22 },
-  meta: {
-    marginTop: 6,
-    fontSize: 11,
-    color: colors.textSecondary,
-  },
-  sistema: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    textAlign: 'center',
-    marginBottom: 14,
-    paddingHorizontal: 20,
-  },
-  pensando: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  pensandoText: { color: colors.textSecondary, fontSize: 13 },
-
-  vacio: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 40,
-  },
+  lista: { padding: 16, paddingBottom: 24, flexGrow: 1 },
+  vacio: { alignItems: 'center', paddingTop: 48, paddingHorizontal: 12 },
   vacioLogo: {
     width: 64,
     height: 64,
     borderRadius: 32,
-    marginBottom: 16,
     backgroundColor: 'rgba(34,197,94,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 16,
   },
-  vacioTitulo: {
-    color: colors.text,
-    fontSize: 22,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
+  vacioTitulo: { color: colors.text, fontSize: 18, fontWeight: '700', textAlign: 'center' },
   vacioSub: {
     color: colors.textSecondary,
-    marginTop: 6,
     textAlign: 'center',
-    maxWidth: 380,
+    marginTop: 8,
+    marginBottom: 20,
+    lineHeight: 20,
   },
-  chips: { marginTop: 24, gap: 10, width: '100%', maxWidth: 460 },
+  chips: { gap: 8, width: '100%' },
   chip: {
-    padding: 14,
-    borderRadius: 14,
+    backgroundColor: colors.bgCard,
     borderWidth: 1,
     borderColor: colors.border,
-    backgroundColor: colors.bgCard,
+    borderRadius: 12,
+    padding: 12,
   },
-  chipText: { color: '#cbd5e1', fontSize: 14 },
-
+  chipText: { color: colors.textSecondary, fontSize: 13 },
+  fila: { flexDirection: 'row', marginBottom: 12, maxWidth: '100%' },
+  filaUsuario: { justifyContent: 'flex-end' },
+  filaIa: { justifyContent: 'flex-start', alignItems: 'flex-end' },
+  avatarIa: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(34,197,94,0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+    marginBottom: 4,
+  },
+  burbuja: { maxWidth: '82%', borderRadius: 16, padding: 12 },
+  burbujaUsuario: { backgroundColor: colors.greenDark, borderBottomRightRadius: 4 },
+  burbujaIa: {
+    backgroundColor: colors.bgCard,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderBottomLeftRadius: 4,
+  },
+  burbujaError: { borderColor: colors.danger },
+  burbujaImg: {
+    width: '100%',
+    height: 160,
+    borderRadius: 12,
+    marginBottom: 8,
+    backgroundColor: colors.bgMain,
+  },
+  texto: { color: colors.text, fontSize: 15, lineHeight: 22 },
+  meta: { color: colors.textSecondary, fontSize: 11, marginTop: 8 },
+  sistema: {
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginVertical: 8,
+    fontSize: 13,
+  },
+  pensando: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  pensandoText: { color: colors.textSecondary, fontSize: 13 },
+  previewBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    backgroundColor: colors.bgSidebar,
+  },
+  previewThumb: { width: 44, height: 44, borderRadius: 8 },
+  previewLabel: { flex: 1, color: colors.textSecondary, fontSize: 13 },
   inputZona: {
     paddingHorizontal: 16,
     paddingTop: 8,
-    paddingBottom: 12,
-    width: '100%',
-    maxWidth: MaxContentWidth,
-    alignSelf: 'center',
+    paddingBottom: Platform.OS === 'ios' ? 20 : 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
   inputBox: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 8,
-    backgroundColor: colors.inputBg,
-    borderRadius: 18,
+    backgroundColor: colors.bgCard,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    gap: 4,
   },
   input: {
     flex: 1,
+    minHeight: 40,
+    maxHeight: 120,
     color: colors.text,
     fontSize: 15,
-    maxHeight: 120,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     paddingVertical: 8,
   },
+  camBtn: { padding: 10 },
   enviarBtn: {
+    backgroundColor: colors.green,
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.green,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -544,33 +649,42 @@ const s = StyleSheet.create({
   aviso: {
     color: colors.textSecondary,
     fontSize: 11,
-    textAlign: 'center',
     marginTop: 8,
+    textAlign: 'center',
   },
-
   panel: {
     position: 'absolute',
-    top: 58,
+    top: 56,
     right: 12,
-    width: 300,
+    width: 280,
     maxHeight: 360,
-    zIndex: 10,
     backgroundColor: colors.bgSidebar,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingVertical: 8,
+    padding: 12,
+    zIndex: 20,
   },
-  panelTitulo: {
+  panelTitulo: { color: colors.text, fontWeight: '700', marginBottom: 8 },
+  panelVacio: { color: colors.textSecondary, padding: 12 },
+  
+ 
+    panelItem: {
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    marginBottom: 4,
+  },
+  panelItemActivo: {
+    backgroundColor: 'rgba(34,197,94,0.12)',
+  },
+  panelItemTitulo: {
+    color: colors.text,
+    fontSize: 14,
+  },
+  panelItemFecha: {
     color: colors.textSecondary,
-    fontSize: 12,
-    textTransform: 'uppercase',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    fontSize: 11,
+    marginTop: 2,
   },
-  panelVacio: { color: colors.textSecondary, padding: 14 },
-  panelItem: { paddingHorizontal: 14, paddingVertical: 10 },
-  panelItemActivo: { backgroundColor: 'rgba(34,197,94,0.15)' },
-  panelItemTitulo: { color: colors.text, fontSize: 14 },
-  panelItemFecha: { color: colors.textSecondary, fontSize: 11, marginTop: 2 },
 });

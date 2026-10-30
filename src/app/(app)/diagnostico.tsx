@@ -122,19 +122,29 @@ export default function DiagnosticoScreen() {
       {resultado && (
         <View style={s.card}>
           <Text style={s.cardTitle}>Resultado</Text>
-          <Text style={s.cardLine}>
-            Clase: <Text style={s.strong}>{resultado.clase ?? '—'}</Text>
-          </Text>
-          {resultado.confianza != null && (
+          {resultado.estado ? (
             <Text style={s.cardLine}>
-              Confianza: {(resultado.confianza * 100).toFixed(1)}%
+              Estado: <Text style={s.strong}>{resultado.estado}</Text>
+            </Text>
+          ) : null}
+          {resultado.clasePredicha ? (
+            <Text style={s.cardLine}>
+              Clase: <Text style={s.strong}>{resultado.clasePredicha}</Text>
+            </Text>
+          ) : null}
+          {resultado.confianzaPrincipal != null && (
+            <Text style={s.cardLine}>
+              Confianza: {(resultado.confianzaPrincipal * 100).toFixed(0)}%
             </Text>
           )}
-          {resultado.manejoSugerido ? (
-            <Text style={s.cardBody}>{resultado.manejoSugerido}</Text>
+          {resultado.resumen ? <Text style={s.cardBody}>{resultado.resumen}</Text> : null}
+          {resultado.respuestaAsistente ? (
+            <Text style={[s.cardBody, { marginTop: 12 }]}>{resultado.respuestaAsistente}</Text>
           ) : null}
-          {resultado.mensaje ? (
-            <Text style={s.cardBody}>{resultado.mensaje}</Text>
+          {resultado.advertencia ? (
+            <Text style={[s.cardBody, { color: colors.textSecondary, fontSize: 12 }]}>
+              {resultado.advertencia}
+            </Text>
           ) : null}
         </View>
       )}
