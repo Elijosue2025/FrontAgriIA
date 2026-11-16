@@ -12,6 +12,15 @@ export type SubidaManual = {
   archivoGuardado?: string;
 };
 
+/** Vacío = el API detecta cultivo/tema y usa el chunking de appsettings. */
+export type ParametrosCarga = {
+  cultivo?: string;
+  tema?: string;
+  maxChars?: number;
+  minChars?: number;
+  soloGuardar?: boolean;
+};
+
 export async function listarManuales(): Promise<ListaManuales> {
   const data = await apiFetch('/documentos/listar');
   return {
@@ -21,8 +30,22 @@ export async function listarManuales(): Promise<ListaManuales> {
   };
 }
 
-/** Campo form-data "archivo". El API guarda el PDF y lo vectoriza. */
-export async function subirPdf(uri: string, nombre: string): Promise<SubidaManual> {
+function anexar(form: FormData, p?: ParametrosCarga) {
+  const cultivo = p?.cultivo?.trim();
+  const tema = p?.tema?.trim();
+  if (cultivo) form.append('cultivo', cultivo);
+  if (tema) form.append('tema', tema);
+  if (p?.maxChars && p.maxChars > 0) form.append('maxChars', String(p.maxChars));
+  if (p?.minChars && p.minChars > 0) form.append('minChars', String(p.minChars));
+  if (p?.soloGuardar) form.append('soloGuardar', 'true');
+}
+
+/** Campo form-data "archivo". Hasta 500 MB. soloGuardar no llama a Ollama. */
+export async function subirPdf(
+  uri: string,
+  nombre: string,
+  parametros?: ParametrosCarga,
+): Promise<SubidaManual> {
   const form = new FormData();
   const archivo = nombre.toLowerCase().endsWith('.pdf') ? nombre : `${nombre}.pdf`;
 
@@ -37,13 +60,24 @@ export async function subirPdf(uri: string, nombre: string): Promise<SubidaManua
     } as any);
   }
 
+  anexar(form, parametros);
   return apiFetchForm('/documentos/subir', form);
 }
 
-export async function cargarUno(nombreArchivo: string): Promise<{ mensaje: string }> {
+export async function cargarUno(
+  nombreArchivo: string,
+  parametros?: ParametrosCarga,
+): Promise<{ mensaje: string }> {
+  const body: Record<string, unknown> = { nombreArchivo };
+  const cultivo = parametros?.cultivo?.trim();
+  const tema = parametros?.tema?.trim();
+  if (cultivo) body.cultivo = cultivo;
+  if (tema) body.tema = tema;
+  if (parametros?.maxChars && parametros.maxChars > 0) body.maxChars = parametros.maxChars;
+  if (parametros?.minChars && parametros.minChars > 0) body.minChars = parametros.minChars;
   return apiFetch('/documentos/cargar-uno', {
     method: 'POST',
-    body: JSON.stringify({ nombreArchivo }),
+    body: JSON.stringify(body),
   });
 }
 

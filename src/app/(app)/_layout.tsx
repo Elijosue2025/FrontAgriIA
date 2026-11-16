@@ -14,6 +14,7 @@ const PRINCIPAL = [
   { ruta: '/cultivos', icono: 'seedling', titulo: 'Cultivos' },
   { ruta: '/plagas', icono: 'bug', titulo: 'Plagas' },
   { ruta: '/biblioteca', icono: 'book', titulo: 'Biblioteca Técnica' },
+  { ruta: '/cargar', icono: 'file-upload', titulo: 'Cargar manuales' },
 ] as const;
 
 const ANALISIS = [

@@ -8,9 +8,8 @@ import {
   ActivityIndicator,
   Platform,
 } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { FontAwesome5 } from '@expo/vector-icons';
-import * as DocumentPicker from 'expo-document-picker';
 import { AgroColors as colors } from '@/constants/theme';
 import {
   PACKS_DISPONIBLES,
@@ -19,16 +18,16 @@ import {
   marcarDescargado,
   quitarDescargado,
 } from '@/services/conocimientoService';
-import { cargarTodos, cargarUno, listarManuales, subirPdf } from '@/services/documentoService';
+import { cargarTodos, cargarUno, listarManuales } from '@/services/documentoService';
 
 export default function BibliotecaScreen() {
   const [descargados, setDescargados] = useState<string[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [manuales, setManuales] = useState<string[]>([]);
   const [cargandoLista, setCargandoLista] = useState(false);
-  const [subiendo, setSubiendo] = useState(false);
   const [aviso, setAviso] = useState('');
   const [error, setError] = useState('');
+  const router = useRouter();
 
   const refrescar = useCallback(async () => {
     setCargandoLista(true);
@@ -68,35 +67,6 @@ export default function BibliotecaScreen() {
     }
   };
 
-  const elegirYSubir = async () => {
-    setError('');
-    setAviso('');
-    const picked = await DocumentPicker.getDocumentAsync({
-      type: 'application/pdf',
-      copyToCacheDirectory: true,
-      multiple: true,
-    });
-    if (picked.canceled || picked.assets.length === 0) return;
-
-    setSubiendo(true);
-    try {
-      const guardados: string[] = [];
-      for (let i = 0; i < picked.assets.length; i++) {
-        const file = picked.assets[i];
-        setAviso(`Vectorizando ${i + 1} de ${picked.assets.length}: ${file.name}. Puede tardar varios minutos.`);
-        const r = await subirPdf(file.uri, file.name);
-        guardados.push(r.archivoGuardado || file.name);
-      }
-      setAviso(`Listo. ${guardados.join(', ')}`);
-      await refrescar();
-    } catch (e: any) {
-      setError(e.message || 'No se pudo subir el PDF');
-      setAviso('');
-    } finally {
-      setSubiendo(false);
-    }
-  };
-
   const reindexar = async (nombre: string) => {
     setBusy(nombre);
     setError('');
@@ -131,16 +101,12 @@ export default function BibliotecaScreen() {
     <ScrollView style={s.container} contentContainerStyle={{ paddingBottom: 32 }}>
       <Text style={s.title}>Biblioteca técnica</Text>
       <Text style={s.sub}>
-        Sube un PDF. La API lo guarda en la carpeta de manuales y lo vectoriza con nomic-embed-text.
+        Los PDF nuevos se cargan en Cargar manuales: cultivo, tema, tamaño del fragmento y archivos grandes.
       </Text>
 
-      <Pressable style={[s.subir, subiendo && { opacity: 0.7 }]} onPress={elegirYSubir} disabled={subiendo}>
-        {subiendo ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <FontAwesome5 name="file-upload" size={16} color="#fff" />
-        )}
-        <Text style={s.subirText}>{subiendo ? 'Subiendo…' : 'Subir PDF'}</Text>
+      <Pressable style={s.subir} onPress={() => router.push('/cargar' as any)}>
+        <FontAwesome5 name="file-upload" size={16} color="#fff" />
+        <Text style={s.subirText}>Cargar PDF</Text>
       </Pressable>
 
       {!!aviso && <Text style={s.aviso}>{aviso}</Text>}
@@ -148,7 +114,7 @@ export default function BibliotecaScreen() {
 
       <View style={s.rowTitle}>
         <Text style={s.section}>En el servidor ({manuales.length})</Text>
-        <Pressable onPress={reindexarTodos} disabled={busy === '__todos' || subiendo}>
+        <Pressable onPress={reindexarTodos} disabled={busy === '__todos'}>
           <Text style={s.link}>Cargar todos</Text>
         </Pressable>
       </View>
@@ -165,7 +131,7 @@ export default function BibliotecaScreen() {
             <Pressable
               style={s.dl}
               onPress={() => reindexar(nombre)}
-              disabled={busy === nombre || subiendo}
+              disabled={busy === nombre}
             >
               {busy === nombre ? (
                 <ActivityIndicator size="small" color="#fff" />
