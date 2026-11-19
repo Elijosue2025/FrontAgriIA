@@ -38,6 +38,12 @@ const SUGERENCIAS = [
 
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
+function fechaCorta(iso?: string | null) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString();
+}
+
 function formatTiempo(ms: number) {
   if (ms < 1000) return `${ms} ms`;
   return `${(ms / 1000).toFixed(1)} s`;
@@ -139,7 +145,7 @@ export default function ChatScreen() {
         const tituloNuevo = foto
           ? `Foto · ${(cultivo || 'cultivo').slice(0, 20)}`
           : pregunta.slice(0, 50);
-        const nueva = await conversacionService.crear(usuarioId, tituloNuevo);
+        const nueva = await conversacionService.crear(tituloNuevo);
         id = nueva.id;
         setConversacionId(id);
         setTitulo(nueva.titulo);
@@ -209,7 +215,7 @@ export default function ChatScreen() {
     if (abrir && usuarioId) {
       setCargandoHistorial(true);
       try {
-        setHistorial(await conversacionService.listar(usuarioId));
+        setHistorial(await conversacionService.listar());
       } catch {
         setHistorial([]);
       } finally {
@@ -425,7 +431,7 @@ export default function ChatScreen() {
                     {item.titulo}
                   </Text>
                   <Text style={s.panelItemFecha}>
-                    {new Date(item.fechaActualizacion ?? item.fechaCreacion).toLocaleDateString()}
+                    {fechaCorta(item.fechaActualizacion ?? item.fechaCreacion)}
                   </Text>
                 </Pressable>
               )}

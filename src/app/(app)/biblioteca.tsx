@@ -18,16 +18,18 @@ import {
   marcarDescargado,
   quitarDescargado,
 } from '@/services/conocimientoService';
-import { cargarTodos, cargarUno, listarManuales } from '@/services/documentoService';
+import { listarManuales } from '@/services/documentoService';
+import { useAuth } from '@/context/AuthContext';
+import { puedeAdministrar } from '@/constants/roles';
 
 export default function BibliotecaScreen() {
   const [descargados, setDescargados] = useState<string[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [manuales, setManuales] = useState<string[]>([]);
   const [cargandoLista, setCargandoLista] = useState(false);
-  const [aviso, setAviso] = useState('');
   const [error, setError] = useState('');
   const router = useRouter();
+  const { rol } = useAuth();
 
   const refrescar = useCallback(async () => {
     setCargandoLista(true);
@@ -67,56 +69,24 @@ export default function BibliotecaScreen() {
     }
   };
 
-  const reindexar = async (nombre: string) => {
-    setBusy(nombre);
-    setError('');
-    setAviso(`Cargando ${nombre} al RAG…`);
-    try {
-      const r = await cargarUno(nombre);
-      setAviso(r.mensaje || 'Manual cargado');
-    } catch (e: any) {
-      setError(e.message || 'No se pudo cargar ese manual');
-      setAviso('');
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const reindexarTodos = async () => {
-    setBusy('__todos');
-    setError('');
-    setAviso('Cargando todos los PDF de la carpeta. Puede tardar.');
-    try {
-      const r = await cargarTodos();
-      setAviso(`${r.mensaje}. Procesados: ${r.documentosProcesados ?? 0}`);
-    } catch (e: any) {
-      setError(e.message || 'No se pudieron cargar los manuales');
-      setAviso('');
-    } finally {
-      setBusy(null);
-    }
-  };
-
   return (
     <ScrollView style={s.container} contentContainerStyle={{ paddingBottom: 32 }}>
       <Text style={s.title}>Biblioteca técnica</Text>
       <Text style={s.sub}>
-        Los PDF nuevos se cargan en Cargar manuales: cultivo, tema, tamaño del fragmento y archivos grandes.
+        Manuales y guías técnicas disponibles para consulta.
       </Text>
 
-      <Pressable style={s.subir} onPress={() => router.push('/cargar' as any)}>
-        <FontAwesome5 name="file-upload" size={16} color="#fff" />
-        <Text style={s.subirText}>Cargar PDF</Text>
-      </Pressable>
+      {puedeAdministrar(rol) && (
+        <Pressable style={s.subir} onPress={() => router.push('/admin/documentos' as any)}>
+          <FontAwesome5 name="file-upload" size={16} color="#fff" />
+          <Text style={s.subirText}>Administrar documentos</Text>
+        </Pressable>
+      )}
 
-      {!!aviso && <Text style={s.aviso}>{aviso}</Text>}
       {!!error && <Text style={s.error}>{error}</Text>}
 
       <View style={s.rowTitle}>
-        <Text style={s.section}>En el servidor ({manuales.length})</Text>
-        <Pressable onPress={reindexarTodos} disabled={busy === '__todos'}>
-          <Text style={s.link}>Cargar todos</Text>
-        </Pressable>
+        <Text style={s.section}>Documentos disponibles ({manuales.length})</Text>
       </View>
 
       {cargandoLista ? (
@@ -128,17 +98,6 @@ export default function BibliotecaScreen() {
           <View key={nombre} style={s.card}>
             <FontAwesome5 name="file-pdf" size={18} color={colors.green} />
             <Text style={s.cardTitle} numberOfLines={2}>{nombre}</Text>
-            <Pressable
-              style={s.dl}
-              onPress={() => reindexar(nombre)}
-              disabled={busy === nombre}
-            >
-              {busy === nombre ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Text style={s.dlText}>Al RAG</Text>
-              )}
-            </Pressable>
           </View>
         ))
       )}

@@ -1,4 +1,4 @@
-import { apiFetch } from './api';
+import { apiFetch, SIN_LIMITE } from './api';
 
 export type ModoModelo = 'rapido' | 'preciso';
 
@@ -29,5 +29,6 @@ export const chatService = {
         consulta,
         modoModelo,
       }),
+      timeoutMs: SIN_LIMITE, // el API ya corta cuando Ollama no responde
     }),
 };

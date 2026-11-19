@@ -6,6 +6,7 @@ import {
 import { Slot, usePathname, useRouter } from 'expo-router';
 import { FontAwesome5 } from '@expo/vector-icons';
 import { useAuth } from '@/context/AuthContext';
+import { puedeAdministrar } from '@/constants/roles';
 import { AgroColors as colors } from '@/constants/theme';
 
 const PRINCIPAL = [
@@ -13,19 +14,21 @@ const PRINCIPAL = [
   { ruta: '/diagnostico', icono: 'leaf', titulo: 'Diagnóstico' },
   { ruta: '/cultivos', icono: 'seedling', titulo: 'Cultivos' },
   { ruta: '/plagas', icono: 'bug', titulo: 'Plagas' },
+  { ruta: '/enfermedades', icono: 'virus', titulo: 'Enfermedades' },
   { ruta: '/biblioteca', icono: 'book', titulo: 'Biblioteca Técnica' },
-  { ruta: '/cargar', icono: 'file-upload', titulo: 'Cargar manuales' },
 ] as const;
 
-const ANALISIS = [
-  { icono: 'chart-line', titulo: 'Reportes' },
-  { icono: 'cog', titulo: 'Configuración' },
+const ADMINISTRACION = [
+  { ruta: '/admin/documentos', icono: 'file-upload', titulo: 'Documentos' },
+  { ruta: '/admin/diagnosticos', icono: 'clipboard-check', titulo: 'Diagnósticos' },
 ] as const;
 
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { logout } = useAuth();
+  const { logout, rol } = useAuth();
+
+  const esActivo = (ruta: string) => pathname === ruta || pathname.startsWith(`${ruta}/`);
 
   const ir = (ruta: string) => {
     router.push(ruta as any);
@@ -42,7 +45,7 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       <ScrollView style={{ flex: 1 }} contentContainerStyle={s.menu}>
         <Text style={s.menuTitle}>Principal</Text>
         {PRINCIPAL.map((item) => {
-          const activo = pathname === item.ruta;
+          const activo = esActivo(item.ruta);
           return (
             <Pressable
               key={item.ruta}
@@ -58,13 +61,27 @@ function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           );
         })}
 
-        <Text style={s.menuTitle}>Análisis</Text>
-        {ANALISIS.map((item) => (
-          <Pressable key={item.titulo} style={s.item}>
-            <FontAwesome5 name={item.icono} size={16} color="#cbd5e1" style={{ width: 20 }} />
-            <Text style={s.itemText}>{item.titulo}</Text>
-          </Pressable>
-        ))}
+        {puedeAdministrar(rol) && (
+          <>
+            <Text style={s.menuTitle}>Administración</Text>
+            {ADMINISTRACION.map((item) => {
+              const activo = esActivo(item.ruta);
+              return (
+                <Pressable
+                  key={item.ruta}
+                  onPress={() => ir(item.ruta)}
+                  style={({ pressed, hovered }: any) => [
+                    s.item, (pressed || hovered) && s.itemHover, activo && s.itemActivo,
+                  ]}
+                >
+                  <FontAwesome5 name={item.icono} size={16}
+                    color={activo ? colors.green : '#cbd5e1'} style={{ width: 20 }} />
+                  <Text style={[s.itemText, activo && { color: colors.green }]}>{item.titulo}</Text>
+                </Pressable>
+              );
+            })}
+          </>
+        )}
       </ScrollView>
 
       <View style={s.footer}>

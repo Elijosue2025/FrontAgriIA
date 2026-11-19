@@ -1,6 +1,5 @@
 import { Platform } from 'react-native';
-import { storage } from './storage';
-import { API_URL } from './api';
+import { apiFetch, apiFetchForm, SIN_LIMITE } from './api';
 
 export type DeteccionDto = {
   clave?: string;
@@ -51,7 +50,6 @@ export async function analizarImagen(
   cultivo?: string,
   opciones?: { nombre?: string; conversacionId?: number | null }
 ): Promise<DiagnosticoResultado> {
-  const token = await storage.get('token');
   const form = new FormData();
   const nombre = opciones?.nombre ?? 'foto.jpg';
 
@@ -71,20 +69,8 @@ export async function analizarImagen(
     form.append('conversacionId', String(opciones.conversacionId));
   }
 
-  const res = await fetch(`${API_URL}/Diagnostico/analizar`, {
-    method: 'POST',
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: form,
-  });
-
-  const data = await res.json().catch(() => ({} as any));
-  if (!res.ok) {
-    throw new Error(
-      data.error || data.errorMensaje || data.mensaje || data.title || `Error ${res.status}`
-    );
-  }
+  // Pasa por apiFetchForm: renueva el token solo y tiene timeout.
+  const data = await apiFetchForm('/Diagnostico/analizar', form, { timeoutMs: SIN_LIMITE });
   return normalizarDiagnostico(data);
 }
 
@@ -150,4 +136,22 @@ export function etiquetaDiagnostico(d: DiagnosticoResultado): string {
     return `${p.nombre}${conf}`;
   }
   return d.clasePredicha?.trim() || d.resumen?.trim() || 'análisis de imagen';
+}
+
+export type EstadoVision = {
+  modeloDisponible: boolean;
+  modelo?: string | null;
+  numeroEtiquetas: number;
+  detalle?: string | null;
+};
+
+/** GET /api/Diagnostico/estado */
+export async function obtenerEstadoVision(): Promise<EstadoVision> {
+  const r = await apiFetch('/Diagnostico/estado');
+  return {
+    modeloDisponible: r.modeloDisponible ?? r.ModeloDisponible ?? false,
+    modelo: r.modelo ?? r.Modelo ?? null,
+    numeroEtiquetas: r.numeroEtiquetas ?? r.NumeroEtiquetas ?? 0,
+    detalle: r.detalle ?? r.Detalle ?? null,
+  };
 }
