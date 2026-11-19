@@ -1,25 +1,19 @@
 import { Platform } from 'react-native';
-<<<<<<< HEAD
-import { apiFetch, apiFetchForm } from './api';
-=======
 import { apiFetch, apiFetchForm, SIN_LIMITE } from './api';
 
-/** Mismo valor que [RequestSizeLimit(50_000_000)] de POST /api/documentos/subir. */
-export const LIMITE_PDF_MB = 50;
-export const LIMITE_PDF_BYTES = LIMITE_PDF_MB * 1_000_000;
+/** Mismo tope que Kestrel y POST /api/documentos/subir: 500 MB. */
+export const LIMITE_PDF_BYTES = 524_288_000;
+export const LIMITE_PDF_MB = 500;
 
 /**
- * El API actual de documentos solo recibe el archivo (subir) o el nombre
- * (cargar-uno): detecta cultivo y tema solo y siempre vectoriza. Ignora
- * cultivo, tema, maxChars, minChars y soloGuardar.
- * Cuando el API los admita, cambia esto a true y el formulario completo
- * vuelve a mostrarse en Administración → Documentos.
+ * El API de documentos acepta cultivo, tema, maxChars, minChars y soloGuardar
+ * junto al archivo. Con esto el formulario de Administración → Documentos
+ * muestra esos campos y los envía.
  */
-export const API_ACEPTA_METADATOS = false;
+export const API_ACEPTA_METADATOS = true;
 
 // La ingesta corre dentro de la petición y con Ollama puede tardar varios minutos.
 const TIMEOUT_INGESTA_MS = SIN_LIMITE;
->>>>>>> dff0f05 (Agregar módulos de AgroGuía IA)
 
 export type ListaManuales = {
   ruta?: string;
@@ -60,11 +54,7 @@ function anexar(form: FormData, p?: ParametrosCarga) {
   if (p?.soloGuardar) form.append('soloGuardar', 'true');
 }
 
-<<<<<<< HEAD
 /** Campo form-data "archivo". Hasta 500 MB. soloGuardar no llama a Ollama. */
-=======
-/** Campo form-data "archivo" (hasta LIMITE_PDF_MB). */
->>>>>>> dff0f05 (Agregar módulos de AgroGuía IA)
 export async function subirPdf(
   uri: string,
   nombre: string,
@@ -85,11 +75,7 @@ export async function subirPdf(
   }
 
   anexar(form, parametros);
-<<<<<<< HEAD
-  return apiFetchForm('/documentos/subir', form);
-=======
   return apiFetchForm('/documentos/subir', form, { timeoutMs: TIMEOUT_INGESTA_MS });
->>>>>>> dff0f05 (Agregar módulos de AgroGuía IA)
 }
 
 export async function cargarUno(
@@ -106,17 +92,10 @@ export async function cargarUno(
   return apiFetch('/documentos/cargar-uno', {
     method: 'POST',
     body: JSON.stringify(body),
-<<<<<<< HEAD
-=======
     timeoutMs: TIMEOUT_INGESTA_MS,
->>>>>>> dff0f05 (Agregar módulos de AgroGuía IA)
   });
 }
 
 export async function cargarTodos(): Promise<{ mensaje: string; documentosProcesados: number }> {
-<<<<<<< HEAD
-  return apiFetch('/documentos/cargar', { method: 'POST' });
-=======
   return apiFetch('/documentos/cargar', { method: 'POST', timeoutMs: TIMEOUT_INGESTA_MS });
->>>>>>> dff0f05 (Agregar módulos de AgroGuía IA)
 }

@@ -109,17 +109,12 @@ async function leerError(res: Response): Promise<string> {
   try {
     const json = JSON.parse(texto);
     if (typeof json.error === 'string' && json.error) return json.error;
-<<<<<<< HEAD
-    if (typeof json.mensaje === 'string' && json.mensaje) return json.mensaje;
-    if (json.errors) return (Object.values(json.errors).flat() as string[])[0];
-=======
     if (typeof json.errorMensaje === 'string' && json.errorMensaje) return json.errorMensaje;
     if (typeof json.mensaje === 'string' && json.mensaje) return json.mensaje;
     if (json.errors) {
       const primero = (Object.values(json.errors).flat() as string[])[0];
       if (primero) return primero;
     }
->>>>>>> dff0f05 (Agregar módulos de AgroGuía IA)
     if (json.title) return json.title;
   } catch {}
   return texto || res.statusText;
@@ -170,40 +165,15 @@ async function enviar(
   return res.json();
 }
 
-<<<<<<< HEAD
-/** multipart. No pongas Content-Type: el navegador arma el boundary. */
-export async function apiFetchForm(path: string, form: FormData, reintento = false): Promise<any> {
-  const token = await storage.get('token');
-
-  const res = await fetch(`${API_URL}${path}`, {
-    method: 'POST',
-    headers: {
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: form,
-  });
-
-  if (res.status === 401) {
-    if (!reintento && (await renovarSesion())) {
-      return apiFetchForm(path, form, true);
-    }
-    onUnauthorized?.();
-  }
-
-  if (!res.ok) throw new Error(await leerError(res));
-  if (res.status === 204) return null;
-  return res.json();
-=======
 export function apiFetch(path: string, opciones: OpcionesApi = {}): Promise<any> {
   return enviar(path, opciones, false, false);
 }
 
-/** multipart/form-data (POST). */
+/** multipart/form-data (POST). No pongas Content-Type: el navegador arma el boundary. */
 export function apiFetchForm(
   path: string,
   form: FormData,
   opciones: Pick<OpcionesApi, 'timeoutMs'> = {},
 ): Promise<any> {
   return enviar(path, { method: 'POST', body: form, ...opciones }, true, false);
->>>>>>> dff0f05 (Agregar módulos de AgroGuía IA)
 }
