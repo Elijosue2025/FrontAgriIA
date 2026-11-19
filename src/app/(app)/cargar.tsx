@@ -14,10 +14,10 @@ import { FontAwesome5 } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import { AgroColors as colors } from '@/constants/theme';
 import {
-  ParametrosCarga,
   cargarUno,
   listarManuales,
   subirPdf,
+  type ParametrosCarga,
 } from '@/services/documentoService';
 
 const MAX_BYTES = 524_288_000;

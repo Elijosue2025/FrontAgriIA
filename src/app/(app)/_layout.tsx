@@ -223,6 +223,13 @@ const s = StyleSheet.create({
   contentCard: { flex: 1, borderRadius: 18, overflow: 'hidden', backgroundColor: colors.bgMain },
 
   // DRAWER (móvil)
-  backdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)' },
+  backdrop: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
   drawer: { position: 'absolute', top: 0, bottom: 0, left: 0, width: 260, flexDirection: 'row' },
 });

@@ -145,7 +145,7 @@ export default function ChatScreen() {
         const tituloNuevo = foto
           ? `Foto · ${(cultivo || 'cultivo').slice(0, 20)}`
           : pregunta.slice(0, 50);
-        const nueva = await conversacionService.crear(tituloNuevo);
+        const nueva = await conversacionService.crear(usuarioId, tituloNuevo);
         id = nueva.id;
         setConversacionId(id);
         setTitulo(nueva.titulo);
@@ -215,7 +215,7 @@ export default function ChatScreen() {
     if (abrir && usuarioId) {
       setCargandoHistorial(true);
       try {
-        setHistorial(await conversacionService.listar());
+        setHistorial(await conversacionService.listar(usuarioId));
       } catch {
         setHistorial([]);
       } finally {

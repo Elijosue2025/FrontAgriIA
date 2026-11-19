@@ -17,10 +17,10 @@ import {
   API_ACEPTA_METADATOS,
   LIMITE_PDF_BYTES,
   LIMITE_PDF_MB,
-  ParametrosCarga,
   cargarUno,
   listarManuales,
   subirPdf,
+  type ParametrosCarga,
 } from '@/services/documentoService';
 
 const MAX_BYTES = LIMITE_PDF_BYTES;
